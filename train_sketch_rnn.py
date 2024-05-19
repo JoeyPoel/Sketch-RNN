@@ -7,21 +7,20 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from sketch_rnn.hparams import hparam_parser
-from sketch_rnn.utils import AverageMeter, ModelCheckpoint
+from sketch_rnn.utils import AverageMeter
 from sketch_rnn.dataset import SketchRNNDataset, load_strokes, collate_drawings
 from sketch_rnn.model import SketchRNN, model_step
+from checkpoint import ModelCheckpoint
 
 
-
-def train_epoch(model, data_loader, optimizer, scheduler, device,
-                grad_clip=None):
+def train_epoch(model, data_loader, optimizer, scheduler, device, grad_clip=None):
     model.train()
     loss_meter = AverageMeter()
     with tqdm(total=len(data_loader.dataset)) as progress_bar:
         for data, lengths in data_loader:
             data = data.to(device, non_blocking=True)
             lengths = lengths.to(device, non_blocking=True)
-            # training step
+            # Training step
             optimizer.zero_grad()
             loss = model_step(model, data, lengths)
             loss.backward()
@@ -29,7 +28,7 @@ def train_epoch(model, data_loader, optimizer, scheduler, device,
                 nn.utils.clip_grad_value_(model.parameters(), grad_clip)
             optimizer.step()
             scheduler.step()
-            # update loss meter and progbar
+            # Update loss meter and progress bar
             loss_meter.update(loss.item(), data.size(0))
             progress_bar.set_postfix(loss=loss_meter.avg)
             progress_bar.update(data.size(0))
@@ -60,13 +59,14 @@ def test(x):
     args = parser.parse_args()
     return collate_drawings(x, args.max_seq_len)
 
+
 def train_sketch_rnn(args):
     torch.manual_seed(884)
     use_gpu = torch.cuda.is_available()
     device = torch.device('cuda') if use_gpu else torch.device('cpu')
-    saver = ModelCheckpoint(args.save_dir) if (args.save_dir is not None) else None
+    saver = ModelCheckpoint(args.save_dir) if args.save_dir is not None else None
 
-    # initialize train and val datasets
+    # Initialize train and val datasets
     train_strokes, valid_strokes, test_strokes = load_strokes(args.data_dir, args)
     train_data = SketchRNNDataset(
         train_strokes,
@@ -82,7 +82,7 @@ def train_sketch_rnn(args):
         augment_stroke_prob=0.0
     )
 
-    # initialize data loaders
+    # Initialize data loaders
     collate_fn = test
     train_loader = DataLoader(
         train_data,
@@ -101,21 +101,26 @@ def train_sketch_rnn(args):
         num_workers=args.num_workers
     )
 
-    # model & optimizer
+    # Model & optimizer
     model = SketchRNN(args).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, args.lr_decay)
 
-    for epoch in range(args.num_epochs):
+    # Load checkpoint if available
+    start_epoch = 0
+    if saver is not None:
+        start_epoch, model, optimizer = saver.load(model, optimizer)
+        if start_epoch is None:
+            start_epoch = 0
+
+    for epoch in range(start_epoch, args.num_epochs):
         train_loss = train_epoch(
             model, train_loader, optimizer, scheduler, device, args.grad_clip)
         val_loss = eval_epoch(model, val_loader, device)
-        print('Epoch %0.3i, Train Loss: %0.4f, Valid Loss: %0.4f' %
-              (epoch+1, train_loss, val_loss))
+        print(f'Epoch {epoch}, Train Loss: {train_loss:.4f}, Valid Loss: {val_loss:.4f}')
         if saver is not None:
-            saver(epoch, model, optimizer, train_loss, val_loss)
-        time.sleep(0.5) # avoids progress bar issue
-
+            saver.save(epoch, model, optimizer, train_loss, val_loss)
+        time.sleep(0.5)  # Avoids progress bar issue
 
 
 if __name__ == '__main__':
