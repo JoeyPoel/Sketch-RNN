@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from functools import partial
 
 from sketch_rnn.hparams import hparam_parser
 from sketch_rnn.utils import AverageMeter
@@ -12,6 +13,8 @@ from sketch_rnn.dataset import SketchRNNDataset, load_strokes, collate_drawings
 from sketch_rnn.model import SketchRNN, model_step
 from checkpoint import ModelCheckpoint
 
+def collate_drawings_fn(x, max_len):
+    return collate_drawings(x, max_len)
 
 def train_epoch(model, data_loader, optimizer, scheduler, device, grad_clip=None):
     model.train()
@@ -23,6 +26,8 @@ def train_epoch(model, data_loader, optimizer, scheduler, device, grad_clip=None
             # Training step
             optimizer.zero_grad()
             loss = model_step(model, data, lengths)
+            if loss is None:  # Skip this batch if loss is None
+                continue
             loss.backward()
             if grad_clip is not None:
                 nn.utils.clip_grad_value_(model.parameters(), grad_clip)
@@ -44,21 +49,11 @@ def eval_epoch(model, data_loader, device):
         data = data.to(device, non_blocking=True)
         lengths = lengths.to(device, non_blocking=True)
         loss = model_step(model, data, lengths)
-        if loss is not None:
-            loss_meter.update(loss.item(), data.size(0))
+        if loss is None:  # Skip this batch if loss is None
+            continue
+        print(f"Validation loss for current batch: {loss.item()}")  # Debugging line
+        loss_meter.update(loss.item(), data.size(0))
     return loss_meter.avg
-
-
-def test(x):
-    hp_parser = hparam_parser()
-    parser = argparse.ArgumentParser(parents=[hp_parser])
-    parser.add_argument('--data_dir', type=str, required=True)
-    parser.add_argument('--save_dir', type=str, default=None)
-    parser.add_argument('--num_epochs', type=int, default=2)
-    parser.add_argument('--num_workers', type=int, default=4)
-    args = parser.parse_args()
-    return collate_drawings(x, args.max_seq_len)
-
 
 def train_sketch_rnn(args):
     torch.manual_seed(884)
@@ -83,7 +78,7 @@ def train_sketch_rnn(args):
     )
 
     # Initialize data loaders
-    collate_fn = test
+    collate_fn = partial(collate_drawings_fn, max_len=args.max_seq_len)
     train_loader = DataLoader(
         train_data,
         batch_size=args.batch_size,
@@ -114,14 +109,12 @@ def train_sketch_rnn(args):
             start_epoch = 0
 
     for epoch in range(start_epoch, args.num_epochs):
-        train_loss = train_epoch(
-            model, train_loader, optimizer, scheduler, device, args.grad_clip)
+        train_loss = train_epoch(model, train_loader, optimizer, scheduler, device, args.grad_clip)
         val_loss = eval_epoch(model, val_loader, device)
         print(f'Epoch {epoch}, Train Loss: {train_loss:.4f}, Valid Loss: {val_loss:.4f}')
         if saver is not None:
             saver.save(epoch, model, optimizer, train_loss, val_loss)
         time.sleep(0.5)  # Avoids progress bar issue
-
 
 if __name__ == '__main__':
     hp_parser = hparam_parser()
