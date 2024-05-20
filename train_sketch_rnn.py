@@ -45,14 +45,16 @@ def train_epoch(model, data_loader, optimizer, scheduler, device, grad_clip=None
 def eval_epoch(model, data_loader, device):
     model.eval()
     loss_meter = AverageMeter()
-    for data, lengths in data_loader:
-        data = data.to(device, non_blocking=True)
-        lengths = lengths.to(device, non_blocking=True)
-        loss = model_step(model, data, lengths)
-        if loss is None:  # Skip this batch if loss is None
-            continue
-        print(f"Validation loss for current batch: {loss.item()}")  # Debugging line
-        loss_meter.update(loss.item(), data.size(0))
+    with tqdm(total=len(data_loader.dataset)) as progress_bar:
+        for data, lengths in data_loader:
+            data = data.to(device, non_blocking=True)
+            lengths = lengths.to(device, non_blocking=True)
+            loss = model_step(model, data, lengths)
+            if loss is None:  # Skip this batch if loss is None
+                continue
+            loss_meter.update(loss.item(), data.size(0))
+            progress_bar.set_postfix(loss=loss_meter.avg)
+            progress_bar.update(data.size(0))
     return loss_meter.avg
 
 def train_sketch_rnn(args):
@@ -73,8 +75,8 @@ def train_sketch_rnn(args):
         valid_strokes,
         max_len=args.max_seq_len,
         scale_factor=train_data.scale_factor,
-        random_scale_factor=0.0,
-        augment_stroke_prob=0.0
+        random_scale_factor=args.random_scale_factor,
+        augment_stroke_prob=args.augment_stroke_prob
     )
 
     # Initialize data loaders

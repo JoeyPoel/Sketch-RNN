@@ -39,12 +39,16 @@ def load_strokes(data_dir, hps):
     # Shuffle the data to ensure randomness
     np.random.shuffle(all_strokes)
 
-    # Split the data into train and validation sets
-    split_index = int(len(all_strokes) * 0.8)  # 80% for training
-    train_strokes = all_strokes[:split_index]
-    valid_strokes = all_strokes[split_index:]
+    # Calculate splits for train, validation, and test sets
+    train_split = int(len(all_strokes) * 0.8)  # 80% for training
+    valid_split = int(len(all_strokes) * 0.2)  # 20% for validation
 
-    return train_strokes, valid_strokes, None
+    # Split the data
+    train_strokes = all_strokes[:train_split]
+    valid_strokes = all_strokes[train_split:train_split + valid_split]
+    test_strokes = all_strokes[train_split + valid_split:]
+
+    return train_strokes, valid_strokes, test_strokes
 
 class SketchRNNDataset:
     def __init__(self,
@@ -169,7 +173,6 @@ def pad_batch(sequences, max_len):
     return output
 
 def collate_drawings(sequences, max_len):
-    lengths = torch.tensor([len(seq) for seq in sequences],
-                           dtype=torch.long)
+    lengths = torch.tensor([len(seq) for seq in sequences], dtype=torch.long)
     batch = pad_batch(sequences, max_len)
     return batch, lengths
