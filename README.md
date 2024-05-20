@@ -2,6 +2,7 @@
 
 The goal of this repositority is to provide an accurate and efficient PyTorch implementation of the [Sketch-RNN model](https://arxiv.org/abs/1704.03477) from Ha & Eck (2017). 
 The [official implementation](https://github.com/tensorflow/magenta/blob/master/magenta/models/sketch_rnn/README.md) is written in TensorFlow, provided through the magenta library.
+The compatible Dataset with this implementation is [How Do Humans Sketch Objects dataset](https://cybertron.cg.tu-berlin.de/eitz/projects/classifysketch/).
 
 ## Existing pytorch repo
 
@@ -12,10 +13,20 @@ There is an [existing PyTorch implementation](https://github.com/alexis-jacq/Pyt
 4. __HyperLSTM__. I have also implemented the HyperLSTM model used for the Sketch-RNN decoder.
 
 ## Development notes
+
 The provided code runs, however, there are a few "to-do" items to correctly match the official implementation:
 
 1. __Encoder LSTM__: I have not yet implemented recurrent dropout and layer normalization for the bi-directional encoder LSTM.
 2. __Input/output dropout__: The magenta library offers optional input/output dropout for the decoder LSTM, although they were not used in the Sketch-RNN paper. I have not implemented either.
+
+## Data Preperation
+
+Before you are able to train the model with the [How Do Humans Sketch Objects dataset](https://cybertron.cg.tu-berlin.de/eitz/projects/classifysketch/) you first need to convert the svg sketches to npz sketches. This is as simple as running the converter in terminal.
+Make sure the directory of the dataset is 'sketches_svg/svg' otherwise it will not find the sketches.
+
+```
+python svg_to_npz_converter.py
+```
 
 ## Example usage
 
