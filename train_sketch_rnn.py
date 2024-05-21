@@ -11,7 +11,7 @@ from sketch_rnn.hparams import hparam_parser
 from sketch_rnn.utils import AverageMeter
 from sketch_rnn.dataset import SketchRNNDataset, load_strokes, collate_drawings
 from sketch_rnn.model import SketchRNN, model_step
-from checkpoint import ModelCheckpoint
+from sketch_rnn.checkpoint import ModelCheckpoint
 
 def collate_drawings_fn(x, max_len):
     return collate_drawings(x, max_len)

@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Replace 'path_to_your_file.npz' with the path to the .npz file you want to check
+# For example you can load this npz '../sketches_npz/octopus/11223.npz'
 data = np.load('path_to_your_file.npz', allow_pickle=True)
 
 # Print the number of arrays in the file
