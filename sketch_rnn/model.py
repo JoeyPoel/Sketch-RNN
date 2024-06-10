@@ -16,27 +16,46 @@ __all__ = ['SketchRNN', 'model_step', 'sample_conditional', 'sample_unconditiona
 class Encoder(nn.Module):
     def __init__(self, hidden_size, z_size):
         super().__init__()
-        self.rnn = nn.LSTM(5, hidden_size, bidirectional=True, batch_first=True)
-        self.output = nn.Linear(2 * hidden_size, 2 * z_size)
         self.hidden_size = hidden_size
+        self.rnn = nn.LSTM(2, hidden_size, bidirectional=True, batch_first=True)
+        self.output = nn.Linear(2 * hidden_size, 2 * z_size)
         self.reset_parameters()
 
     def reset_parameters(self):
         for i in range(2):
             weight_ih, weight_hh, bias_ih, bias_hh = self.rnn.all_weights[i]
             nn.init.xavier_uniform_(weight_ih)
-            init_orthogonal_(weight_hh, hsize=self.hidden_size)
+            self.init_orthogonal_(weight_hh, hsize=self.hidden_size)
             nn.init.zeros_(bias_ih)
             nn.init.zeros_(bias_hh)
         nn.init.normal_(self.output.weight, 0., 0.001)
         nn.init.zeros_(self.output.bias)
 
-    def forward(self, x, lengths=None):
-        if lengths is not None:
-            x = rnn_utils.pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
-        _, (x, _) = self.rnn(x)  # [2,batch,hid]
-        x = x.permute(1, 0, 2).flatten(1).contiguous()  # [batch,2*hid]
-        z_mean, z_logvar = self.output(x).chunk(2, 1)
+    def init_orthogonal_(self, weight, hsize):
+        # Helper function to initialize orthogonal weights
+        nn.init.orthogonal_(weight)
+        if weight.shape[0] == 4 * hsize:
+            weight.data[3 * hsize: 4 * hsize].fill_(0)
+    
+    def forward(self, x, lengths):
+        # Sort lengths and input in descending order
+        lengths, perm_idx = lengths.sort(0, descending=True)
+        x = x[perm_idx]
+        
+        # Pack the padded sequence
+        x = rnn_utils.pack_padded_sequence(x, lengths.cpu(), batch_first=True)
+        
+        # Run through the LSTM
+        packed_out, (h_n, c_n) = self.rnn(x)
+        
+        # Unpack the output
+        h_n = h_n.permute(1, 0, 2).contiguous().view(-1, 2 * self.hidden_size)
+        
+        # Undo the sorting
+        _, unperm_idx = perm_idx.sort(0)
+        h_n = h_n[unperm_idx]
+        
+        z_mean, z_logvar = self.output(h_n).chunk(2, 1)
         z = z_mean + torch.exp(0.5 * z_logvar) * torch.randn_like(z_logvar)
         return z, z_mean, z_logvar
 

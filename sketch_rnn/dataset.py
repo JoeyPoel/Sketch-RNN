@@ -99,10 +99,13 @@ class SketchRNNDataset:
             sketch = self.random_scale(sketch)
         if self.augment_stroke_prob > 0:
             sketch = self.random_augment(sketch)
-    
-        # Convert lists of arrays to a single numpy array
-        sketch_np = np.concatenate(sketch)
         
+        # Convert lists of arrays to a single numpy array
+        sketch_np = np.concatenate(sketch, axis=0)  # Ensure correct axis for concatenation
+
+        # Print shape for debugging
+        print(f"Sketch {idx} shape after concatenation: {sketch_np.shape}")
+
         return sketch_np
 
 
@@ -147,22 +150,30 @@ class SketchRNNDataset:
 def pad_batch(sequences, max_len):
     batch_size = len(sequences)
     padded_sequences = torch.zeros(batch_size, max_len, 2, dtype=torch.float32)
-    
+    lengths = torch.zeros(batch_size, dtype=torch.long)
+
     for i, seq in enumerate(sequences):
         length = min(len(seq), max_len)
         padded_seq = torch.tensor(seq[:length], dtype=torch.float32)
         padded_sequences[i, :length, :] = padded_seq
-    
-    return padded_sequences
+        lengths[i] = length
 
+        # Print shape for debugging
+        print(f"Padded sequence {i} shape: {padded_seq.shape}")
 
-
+    return padded_sequences, lengths
 
 def collate_drawings(sequences, max_len):
     print("Sequences before padding:")
     for i, seq in enumerate(sequences):
         print(f"Sequence {i} type:", type(seq))
         print(f"Sequence {i} length:", len(seq))
-    padded_batch = pad_batch(sequences, max_len)
-    return padded_batch
+
+    padded_batch, lengths = pad_batch(sequences, max_len)
+
+    # Print shapes for debugging
+    print(f"Padded batch shape: {padded_batch.shape}")
+    print(f"Lengths shape: {lengths.shape}")
+
+    return padded_batch, lengths
 

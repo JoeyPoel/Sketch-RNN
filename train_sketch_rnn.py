@@ -14,24 +14,33 @@ from sketch_rnn.dataset import load_sketches, SketchRNNDataset, collate_drawings
 from sketch_rnn.model import SketchRNN, model_step
 from sketch_rnn.checkpoint import ModelCheckpoint
 
-def collate_drawings_fn(x, max_len):
-    return collate_drawings(x, max_len)
+def collate_drawings_fn(batch, max_len):
+    # Pad sequences to max_len and return correct lengths
+    batch = [torch.tensor(d, dtype=torch.float32) for d in batch]
+    lengths = [min(len(d), max_len) for d in batch]
+    padded_batch = torch.zeros(len(batch), max_len, 2)
+    for i, d in enumerate(batch):
+        end = lengths[i]
+        padded_batch[i, :end] = d[:end]
+    return padded_batch, torch.tensor(lengths, dtype=torch.long)
+
 
 def train_epoch(model, train_loader, optimizer, scheduler, device, grad_clip=None):
     model.train()
     epoch_loss = 0.0
-    for batch in train_loader:
+    for i, batch in enumerate(train_loader):
         batch_input, batch_lengths = batch
         batch_input = batch_input.to(device)
         batch_lengths = batch_lengths.to(device)
 
-        print(f'batch_input shape: {batch_input.shape}')
-        print(f'batch_lengths shape: {batch_lengths.shape}')
-        print(f'batch_lengths: {batch_lengths}')
+        print(f'Batch {i} - batch_input shape: {batch_input.shape}')
+        print(f'Batch {i} - batch_lengths shape: {batch_lengths.shape}')
+        print(f'Batch {i} - batch_lengths: {batch_lengths}')
 
         optimizer.zero_grad()
         output = model(batch_input, batch_lengths)
         if output is None:
+            print(f'Batch {i} - output is None')
             continue  # Skip the batch if the output is None (due to data issues)
 
         loss = output
@@ -40,6 +49,7 @@ def train_epoch(model, train_loader, optimizer, scheduler, device, grad_clip=Non
             nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
         epoch_loss += loss.item()
+        print(f'Batch {i} - loss: {loss.item()}')
 
     if scheduler is not None:
         scheduler.step()
@@ -47,17 +57,17 @@ def train_epoch(model, train_loader, optimizer, scheduler, device, grad_clip=Non
     return epoch_loss / len(train_loader)
 
 
-
 @torch.no_grad()
 def eval_epoch(model, data_loader, device):
     model.eval()
     loss_meter = AverageMeter()
     with tqdm(total=len(data_loader.dataset)) as progress_bar:
-        for data, lengths in data_loader:
+        for i, (data, lengths) in enumerate(data_loader):
             data = data.to(device, non_blocking=True)
             lengths = lengths.to(device, non_blocking=True)
             loss = model_step(model, data, lengths)
             if loss is None:  # Skip this batch if loss is None
+                print(f'Batch {i} - loss is None')
                 continue
             loss_meter.update(loss.item(), data.size(0))
             progress_bar.set_postfix(loss=loss_meter.avg)
