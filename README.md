@@ -59,7 +59,7 @@ parser.add_argument('--kl_decay_rate', type=float, default=0.99995) # R
 parser.add_argument('--reg_covar', type=float, default=1e-6) # covariance shrinkage
 # training params
 parser.add_argument('--batch_size', type=int, default=100)
-parser.add_argument('--lr', type=float, default=0.001)
+parser.add_argument('--lr', type=float, default=0.0001)
 parser.add_argument('--lr_decay', type=float, default=0.9999)
 parser.add_argument('--min_lr', type=float, default=0.00001) # Unused at the moment
 parser.add_argument('--grad_clip', type=float, default=1.0)
