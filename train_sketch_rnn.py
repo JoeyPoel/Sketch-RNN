@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from functools import partial
+import torch.nn.functional as F
 
 from sketch_rnn.hparams import hparam_parser
 from sketch_rnn.utils import AverageMeter
@@ -24,6 +25,23 @@ def collate_drawings_fn(batch, max_len):
         padded_batch[i, :end] = d[:end]
     return padded_batch, torch.tensor(lengths, dtype=torch.long)
 
+def compute_loss(params, z_mean, z_logvar, targets):
+    # Select the predicted values
+    predicted_values = params[0]
+
+    # Reshape or select the appropriate dimensions from predicted values
+    predicted_values = predicted_values[:, :, :2]  # Assuming you only need the first 2 dimensions
+
+    # Compute reconstruction loss
+    reconstruction_loss = F.mse_loss(predicted_values, targets)
+
+    # Compute KL divergence loss
+    kl_loss = -0.5 * torch.sum(1 + z_logvar - z_mean.pow(2) - z_logvar.exp())
+
+    # Combine the two losses
+    loss = reconstruction_loss + kl_loss
+
+    return loss
 
 def train_epoch(model, train_loader, optimizer, scheduler, device, grad_clip=None):
     model.train()
@@ -33,23 +51,22 @@ def train_epoch(model, train_loader, optimizer, scheduler, device, grad_clip=Non
         batch_input = batch_input.to(device)
         batch_lengths = batch_lengths.to(device)
 
-        print(f'Batch {i} - batch_input shape: {batch_input.shape}')
-        print(f'Batch {i} - batch_lengths shape: {batch_lengths.shape}')
-        print(f'Batch {i} - batch_lengths: {batch_lengths}')
-
         optimizer.zero_grad()
         output = model(batch_input, batch_lengths)
         if output is None:
-            print(f'Batch {i} - output is None')
             continue  # Skip the batch if the output is None (due to data issues)
 
-        loss = output
+        # Unpack the output tuple
+        params, z_mean, z_logvar = output
+
+        # Compute the loss
+        loss = compute_loss(params, z_mean, z_logvar, batch_input)  # Assuming batch_input are the targets
+
         loss.backward()
         if grad_clip is not None:
             nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
         epoch_loss += loss.item()
-        print(f'Batch {i} - loss: {loss.item()}')
 
     if scheduler is not None:
         scheduler.step()
@@ -65,7 +82,8 @@ def eval_epoch(model, data_loader, device):
         for i, (data, lengths) in enumerate(data_loader):
             data = data.to(device, non_blocking=True)
             lengths = lengths.to(device, non_blocking=True)
-            loss = model_step(model, data, lengths)
+            loss = model_step
+            (model, data, lengths)
             if loss is None:  # Skip this batch if loss is None
                 print(f'Batch {i} - loss is None')
                 continue

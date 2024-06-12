@@ -5,12 +5,11 @@ import torch.nn.functional as F
 
 __all__ = ['ParameterLayer']
 
-
 class ParameterLayer(nn.Module):
     def __init__(self, input_size, k, d=2):
         super().__init__()
-        self.linear = nn.Linear(input_size, k + 2*k*d + k + 3)
-        self.splits = [k, k*d, k*d, k, 3]
+        self.linear = nn.Linear(input_size, k + 2 * k * d + k + 3)
+        self.splits = [k, k * d, k * d, k, 3]
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -22,18 +21,19 @@ class ParameterLayer(nn.Module):
 
         # unpack variables & apply activation
         mix_logits, means, scales, corrs, v_logits = x.split(self.splits, -1)
-        mix_logp = F.log_softmax(mix_logits, -1) # [...,k]
-        scales = torch.exp(scales) # [...,k*d]
-        corrs = torch.tanh(corrs) # [...,k]
-        v_logp = F.log_softmax(v_logits, -1) # [...,3]
+        mix_logp = F.log_softmax(mix_logits, -1)  # [...,k]
+        scales = torch.exp(scales)  # [...,k*d]
+        corrs = torch.tanh(corrs)  # [...,k]
+        v_logp = F.log_softmax(v_logits, -1)  # [...,3]
 
         # reshape [...,k*d] -> [...,k,d]
         means = means.reshape(*means.shape[:-1], -1, 2)
-        scales = scales.reshape(*scales.shape[:-1], -1, 2)
+        scales = scales.reshape(*scales.shape[:-1], -1)  # Keep it 3D for consistency
 
         if T != 1:
-            v_logp = F.log_softmax(v_logp/T, -1)
-            mix_logp = F.log_softmax(mix_logp/T, -1)
-            scales = scales * math.sqrt(T)
+            v_logp = F.log_softmax(v_logp / T, -1)
+            mix_logp = F.log_softmax(mix_logp / T, -1)
+            scales = scales.unsqueeze(-1) * math.sqrt(T)  # Add a new dimension
 
+        # Ensure all return values are tensors
         return mix_logp, means, scales, corrs, v_logp

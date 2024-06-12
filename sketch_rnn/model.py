@@ -38,9 +38,17 @@ class Encoder(nn.Module):
             weight.data[3 * hsize: 4 * hsize].fill_(0)
     
     def forward(self, x, lengths):
+        # Ensure lengths do not exceed sequence length
+        max_length = x.size(1)
+        lengths = torch.min(lengths, torch.full_like(lengths, max_length))
+        
         # Sort lengths and input in descending order
         lengths, perm_idx = lengths.sort(0, descending=True)
         x = x[perm_idx]
+        
+        # Print shapes and lengths for debugging
+        print(f"x shape: {x.shape}")
+        print(f"lengths: {lengths}")
         
         # Pack the padded sequence
         x = rnn_utils.pack_padded_sequence(x, lengths.cpu(), batch_first=True)
@@ -63,30 +71,35 @@ class Encoder(nn.Module):
 class SketchRNN(nn.Module):
     def __init__(self, hps):
         super().__init__()
-        # check inputs
+        # Check inputs
         assert hps.enc_model in ['lstm', 'layer_norm', 'hyper']
         assert hps.dec_model in ['lstm', 'layer_norm', 'hyper']
         if hps.enc_model in ['layer_norm', 'hyper']:
             raise NotImplementedError('LayerNormLSTM and HyperLSTM not yet implemented for bi-directional encoder.')
-        # encoder modules
+        
+        # Encoder modules
         self.encoder = Encoder(hps.enc_rnn_size, hps.z_size)
-        # decoder modules
+        
+        # Decoder modules
         cell_fn = _cell_types[hps.dec_model]
         self.cell = cell_fn(5 + hps.z_size, hps.dec_rnn_size, r_dropout=hps.r_dropout)
         self.decoder = torch.jit.script(LSTMLayer(self.cell, batch_first=True))
         self.init = nn.Linear(hps.z_size, self.cell.state_size)
         self.param_layer = ParameterLayer(hps.dec_rnn_size, k=hps.num_mixture)
-        # loss modules
+        
+        # Loss modules
         self.loss_kl = KLLoss(hps.kl_weight, eta_min=hps.kl_weight_start, R=hps.kl_decay_rate, kl_min=hps.kl_tolerance)
-        self.loss_draw = DrawingLoss(reg_covar=hps.reg_covar)
+        self.loss_draw = DrawingLoss(hps.reg_covar)
+        
         self.max_len = hps.max_seq_len
         self.z_size = hps.z_size
+        
         self.reset_parameters()
 
     def reset_parameters(self):
         def reset(m):
             return hasattr(m, 'reset_parameters') and not isinstance(m, torch.jit.ScriptModule)
-
+        
         for m in filter(reset, self.children()):
             m.reset_parameters()
 
@@ -94,32 +107,51 @@ class SketchRNN(nn.Module):
         nn.init.zeros_(self.init.bias)
 
     def _forward(self, enc_inputs, dec_inputs, enc_lengths=None):
-        # encoder forward
+        # Encoder forward
         z, z_mean, z_logvar = self.encoder(enc_inputs, enc_lengths)
 
-        # initialize decoder state
+        # Initialize decoder state
         state = torch.tanh(self.init(z)).chunk(2, dim=-1)
 
-        # append z to decoder inputs
+        # Ensure dec_inputs has the correct initial size before concatenation
+        expected_initial_size = self.cell.input_size - z.size(-1)
+        current_initial_size = dec_inputs.size(-1)
+        if current_initial_size < expected_initial_size:
+            padding_size = expected_initial_size - current_initial_size
+            dec_inputs = torch.cat((dec_inputs, torch.zeros(dec_inputs.size(0), dec_inputs.size(1), padding_size, device=dec_inputs.device)), dim=-1)
+        elif current_initial_size > expected_initial_size:
+            raise ValueError(f"dec_inputs initial size {current_initial_size} is greater than expected {expected_initial_size}")
+
+        # Append z to decoder inputs
         z_rep = z[:, None].expand(-1, self.max_len, -1)
         dec_inputs = torch.cat((dec_inputs, z_rep), dim=-1)
 
-        # decoder forward
+        # Decoder forward
         output, _ = self.decoder(dec_inputs, state)
 
-        # mixlayer outputs
+       # Mixlayer outputs
         params = self.param_layer(output)
+
+        # Print the input 'output' passed to param_layer
+        print(f"Output shape before passing to ParameterLayer: {output.shape}")
+
+        # Check if params is a tuple
+        print(f"Params type after being generated: {type(params)}")
+
+        # Print the shapes of individual tensors within the tuple
+        for i, param_tensor in enumerate(params):
+            print(f"Shape of params[{i}]: {param_tensor.shape}")
 
         return params, z_mean, z_logvar
 
     def forward(self, data, lengths=None):
         print(f'data shape: {data.shape}')
         if data.dim() == 3:
-            enc_inputs = data[:, 1:self.max_len + 1, :]  # remove sos
-            dec_inputs = data[:, :self.max_len, :]  # keep sos
+            enc_inputs = data[:, 1:self.max_len + 1, :]  # Remove sos
+            dec_inputs = data[:, :self.max_len, :]  # Keep sos
         elif data.dim() == 2:
-            enc_inputs = data[:, 1:self.max_len + 1].unsqueeze(-1)  # remove sos
-            dec_inputs = data[:, :self.max_len].unsqueeze(-1)  # keep sos
+            enc_inputs = data[:, 1:self.max_len + 1].unsqueeze(-1)  # Remove sos
+            dec_inputs = data[:, :self.max_len].unsqueeze(-1)  # Keep sos
         else:
             raise ValueError(f'Unexpected data dimensions: {data.dim()}')
 
@@ -186,7 +218,7 @@ def sample_from_z(model, z, T=1):
         v_logp = v_logp.squeeze(0)  # Remove the singleton batch dimension
 
         # sample next step
-        v = D.Categorical(logits=v_logp).sample()  # [1]
+        v = D.Categorical(logits[v_logp]).sample()  # [1]
         if v.item() == 2:
             break
         x = sample_gmm(mix_logp, means, scales, corrs)  # [1,2]
