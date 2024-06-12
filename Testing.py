@@ -126,6 +126,6 @@ if __name__ == "__main__":
     args = parse_args()
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    checkpoint_path = 'model2_save/checkpoint_epoch_22.pth'
+    checkpoint_path = 'model2_save/checkpoint_epoch_1.pth'
 
     generate_svg(args, checkpoint_path)

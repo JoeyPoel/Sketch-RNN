@@ -103,9 +103,6 @@ class SketchRNNDataset:
         # Convert lists of arrays to a single numpy array
         sketch_np = np.concatenate(sketch, axis=0)  # Ensure correct axis for concatenation
 
-        # Print shape for debugging
-        print(f"Sketch {idx} shape after concatenation: {sketch_np.shape}")
-
         return sketch_np
 
 
@@ -158,8 +155,6 @@ def pad_batch(sequences, max_len):
         padded_sequences[i, :length, :] = padded_seq
         lengths[i] = length
 
-        # Print shape for debugging
-        print(f"Padded sequence {i} shape: {padded_seq.shape}")
 
     return padded_sequences, lengths
 
@@ -170,10 +165,6 @@ def collate_drawings(sequences, max_len):
         print(f"Sequence {i} length:", len(seq))
 
     padded_batch, lengths = pad_batch(sequences, max_len)
-
-    # Print shapes for debugging
-    print(f"Padded batch shape: {padded_batch.shape}")
-    print(f"Lengths shape: {lengths.shape}")
 
     return padded_batch, lengths
 

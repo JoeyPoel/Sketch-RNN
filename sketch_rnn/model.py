@@ -46,10 +46,6 @@ class Encoder(nn.Module):
         lengths, perm_idx = lengths.sort(0, descending=True)
         x = x[perm_idx]
         
-        # Print shapes and lengths for debugging
-        print(f"x shape: {x.shape}")
-        print(f"lengths: {lengths}")
-        
         # Pack the padded sequence
         x = rnn_utils.pack_padded_sequence(x, lengths.cpu(), batch_first=True)
         
@@ -132,20 +128,9 @@ class SketchRNN(nn.Module):
        # Mixlayer outputs
         params = self.param_layer(output)
 
-        # Print the input 'output' passed to param_layer
-        print(f"Output shape before passing to ParameterLayer: {output.shape}")
-
-        # Check if params is a tuple
-        print(f"Params type after being generated: {type(params)}")
-
-        # Print the shapes of individual tensors within the tuple
-        for i, param_tensor in enumerate(params):
-            print(f"Shape of params[{i}]: {param_tensor.shape}")
-
         return params, z_mean, z_logvar
 
     def forward(self, data, lengths=None):
-        print(f'data shape: {data.shape}')
         if data.dim() == 3:
             enc_inputs = data[:, 1:self.max_len + 1, :]  # Remove sos
             dec_inputs = data[:, :self.max_len, :]  # Keep sos
@@ -166,15 +151,10 @@ def model_step(model, data, lengths=None):
 
     # prepare targets
     targets = data[:, 1:model.max_len + 1, :]
-    x, v_onehot = targets.split([2, 3], -1)
+    x, v_onehot = targets.split([1, 1], -1)
 
     # Normalize one-hot vectors to ensure they sum up to 1
     v_sum = v_onehot.sum(dim=-1, keepdim=True)
-
-    # Check for NaN values in the sum
-    if torch.isnan(v_sum).any():
-        print("NaN values found in the sum of one-hot vectors! Skipping file.")
-        return None  # Skip to the next file
 
     # Handle division by zero
     v_sum[v_sum == 0] = 1  # Replace zeros with ones to prevent division by zero
@@ -183,7 +163,6 @@ def model_step(model, data, lengths=None):
     try:
         assert torch.allclose(v_onehot.sum(-1), torch.ones_like(v_onehot.sum(-1)), atol=1e-5)  # Check if sum is approximately 1
     except AssertionError:
-        print("AssertionError: Skipping file due to NaN values in the sum of one-hot vectors.")
         return None  # Skip to the next file
 
     v = v_onehot.argmax(-1)
@@ -218,7 +197,7 @@ def sample_from_z(model, z, T=1):
         v_logp = v_logp.squeeze(0)  # Remove the singleton batch dimension
 
         # sample next step
-        v = D.Categorical(logits[v_logp]).sample()  # [1]
+        v = D.Categorical(logits=v_logp).sample()  # [1]
         if v.item() == 2:
             break
         x = sample_gmm(mix_logp, means, scales, corrs)  # [1,2]

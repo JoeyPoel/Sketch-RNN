@@ -15,6 +15,7 @@ from sketch_rnn.dataset import load_sketches, SketchRNNDataset, collate_drawings
 from sketch_rnn.model import SketchRNN, model_step
 from sketch_rnn.checkpoint import ModelCheckpoint
 
+
 def collate_drawings_fn(batch, max_len):
     # Pad sequences to max_len and return correct lengths
     batch = [torch.tensor(d, dtype=torch.float32) for d in batch]
@@ -24,6 +25,7 @@ def collate_drawings_fn(batch, max_len):
         end = lengths[i]
         padded_batch[i, :end] = d[:end]
     return padded_batch, torch.tensor(lengths, dtype=torch.long)
+
 
 def compute_loss(params, z_mean, z_logvar, targets):
     # Select the predicted values
@@ -43,35 +45,42 @@ def compute_loss(params, z_mean, z_logvar, targets):
 
     return loss
 
+
 def train_epoch(model, train_loader, optimizer, scheduler, device, grad_clip=None):
     model.train()
     epoch_loss = 0.0
-    for i, batch in enumerate(train_loader):
-        batch_input, batch_lengths = batch
-        batch_input = batch_input.to(device)
-        batch_lengths = batch_lengths.to(device)
+    with tqdm(total=len(train_loader.dataset)) as progress_bar:
+        for i, batch in enumerate(train_loader):
+            batch_input, batch_lengths = batch
+            batch_input = batch_input.to(device)
+            batch_lengths = batch_lengths.to(device)
 
-        optimizer.zero_grad()
-        output = model(batch_input, batch_lengths)
-        if output is None:
-            continue  # Skip the batch if the output is None (due to data issues)
+            optimizer.zero_grad()
+            output = model(batch_input, batch_lengths)
+            if output is None:
+                continue  # Skip the batch if the output is None (due to data issues)
 
-        # Unpack the output tuple
-        params, z_mean, z_logvar = output
+            # Unpack the output tuple
+            params, z_mean, z_logvar = output
 
-        # Compute the loss
-        loss = compute_loss(params, z_mean, z_logvar, batch_input)  # Assuming batch_input are the targets
+            # Compute the loss
+            loss = compute_loss(params, z_mean, z_logvar, batch_input)  # Assuming batch_input are the targets
 
-        loss.backward()
-        if grad_clip is not None:
-            nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        optimizer.step()
-        epoch_loss += loss.item()
+            loss.backward()
+            if grad_clip is not None:
+                nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            optimizer.step()
+            epoch_loss += loss.item()
+
+            # Update progress bar
+            progress_bar.set_postfix(loss=epoch_loss / (i + 1))
+            progress_bar.update(batch_input.size(0))
 
     if scheduler is not None:
         scheduler.step()
 
     return epoch_loss / len(train_loader)
+
 
 
 @torch.no_grad()
@@ -82,8 +91,7 @@ def eval_epoch(model, data_loader, device):
         for i, (data, lengths) in enumerate(data_loader):
             data = data.to(device, non_blocking=True)
             lengths = lengths.to(device, non_blocking=True)
-            loss = model_step
-            (model, data, lengths)
+            loss = model_step(model, data, lengths)
             if loss is None:  # Skip this batch if loss is None
                 print(f'Batch {i} - loss is None')
                 continue
@@ -91,6 +99,7 @@ def eval_epoch(model, data_loader, device):
             progress_bar.set_postfix(loss=loss_meter.avg)
             progress_bar.update(data.size(0))
     return loss_meter.avg
+
 
 def train_sketch_rnn(args):
     torch.manual_seed(884)
@@ -117,12 +126,6 @@ def train_sketch_rnn(args):
         augment_stroke_prob=args.augment_stroke_prob
     )
 
-    # Print the first sketch in the training data for debugging
-    if len(train_data) > 0:
-        print("First sketch in training data:")
-        print(train_data[0])
-    else:
-        print("Training data is empty!")
 
     # Initialize data loaders
     collate_fn = partial(collate_drawings_fn, max_len=args.max_seq_len)
@@ -169,7 +172,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(parents=[hp_parser])
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--save_dir', type=str, default=None)
-    parser.add_argument('--num_epochs', type=int, default=20)
+    parser.add_argument('--num_epochs', type=int, default= 20)
     parser.add_argument('--num_workers', type=int, default=4)
     args = parser.parse_args()
 
