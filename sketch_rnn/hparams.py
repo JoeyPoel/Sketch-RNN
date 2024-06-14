@@ -13,11 +13,11 @@ def hparam_parser():
     group.add_argument('--max_seq_len', type=int, default=250)
     group.add_argument('--enc_model', type=str, default='lstm')
     group.add_argument('--dec_model', type=str, default='layer_norm')
-    group.add_argument('--enc_rnn_size', type=int, default=128)  # Decreased from 256 to 128
+    group.add_argument('--enc_rnn_size', type=int, default=256) 
     group.add_argument('--dec_rnn_size', type=int, default=512)
     group.add_argument('--z_size', type=int, default=128)
     group.add_argument('--num_mixture', type=int, default=20)
-    group.add_argument('--r_dropout', type=float, default=0.2)  # Increased from 0.1 to 0.2
+    group.add_argument('--r_dropout', type=float, default=0.1)  
     #group.add_argument('--input_dropout', type=float, default=0.0) # Not recommended
     #group.add_argument('--output_dropout', type=float, default=0.0) # Not recommended
 
@@ -30,7 +30,7 @@ def hparam_parser():
 
     # training params
     group.add_argument('--batch_size', type=int, default=100)
-    group.add_argument('--lr', type=float, default=0.00001) # decreased from 0.001 to 0.00001
+    group.add_argument('--lr', type=float, default=0.001)
     group.add_argument('--lr_decay', type=float, default=0.9999)
     group.add_argument('--min_lr', type=float, default=0.00001) # UNUSED
     group.add_argument('--grad_clip', type=float, default=1.0)

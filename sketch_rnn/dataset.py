@@ -1,12 +1,10 @@
 import os
-import six
-import requests
 import numpy as np
 import torch
 
 from .utils import get_max_len, to_tensor
 
-__all__ = ['load_strokes', 'SketchRNNDataset', 'collate_drawings']
+__all__ = ['load_sketches', 'SketchRNNDataset', 'collate_drawings']
 
 # start-of-sequence token
 SOS = torch.tensor([0, 0, 1, 0, 0], dtype=torch.float)
@@ -105,7 +103,6 @@ class SketchRNNDataset:
 
         return sketch_np
 
-
     def random_scale(self, sketch):
         """Augment sketch by stretching x and y axis randomly."""
         scaled_sketch = []
@@ -141,12 +138,11 @@ class SketchRNNDataset:
                 augmented_sketch.append(prev_stroke)
         return augmented_sketch
 
-
 # ---- methods for batch collation ----
 
 def pad_batch(sequences, max_len):
     batch_size = len(sequences)
-    padded_sequences = torch.zeros(batch_size, max_len, 2, dtype=torch.float32)
+    padded_sequences = torch.zeros(batch_size, max_len, 5, dtype=torch.float32)  # Adjusted for 5 elements
     lengths = torch.zeros(batch_size, dtype=torch.long)
 
     for i, seq in enumerate(sequences):
@@ -155,8 +151,8 @@ def pad_batch(sequences, max_len):
         padded_sequences[i, :length, :] = padded_seq
         lengths[i] = length
 
-
     return padded_sequences, lengths
+
 
 def collate_drawings(sequences, max_len):
     print("Sequences before padding:")
@@ -166,5 +162,13 @@ def collate_drawings(sequences, max_len):
 
     padded_batch, lengths = pad_batch(sequences, max_len)
 
-    return padded_batch, lengths
+    # Normalize one-hot vectors to ensure they sum up to 1
+    for i in range(padded_batch.size(0)):
+        for j in range(padded_batch.size(1)):
+            one_hot = padded_batch[i, j, 2:]
+            one_hot_sum = torch.sum(one_hot)
+            if one_hot_sum != 1 and one_hot_sum != 0:
+                one_hot /= one_hot_sum
+                padded_batch[i, j, 2:] = one_hot
 
+    return padded_batch, lengths

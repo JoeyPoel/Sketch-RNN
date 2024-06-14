@@ -29,10 +29,7 @@ def collate_drawings_fn(batch, max_len):
 
 def compute_loss(params, z_mean, z_logvar, targets):
     # Select the predicted values
-    predicted_values = params[0]
-
-    # Reshape or select the appropriate dimensions from predicted values
-    predicted_values = predicted_values[:, :, :2]  # Assuming you only need the first 2 dimensions
+    predicted_values = params[0][:, :targets.shape[1], :2]  # Slice to match target length
 
     # Compute reconstruction loss
     reconstruction_loss = F.mse_loss(predicted_values, targets)
@@ -63,8 +60,11 @@ def train_epoch(model, train_loader, optimizer, scheduler, device, grad_clip=Non
             # Unpack the output tuple
             params, z_mean, z_logvar = output
 
+            # Extract targets and adjust the length to match predicted values
+            targets = batch_input[:, 1:params[0].shape[1] + 1, :2]
+
             # Compute the loss
-            loss = compute_loss(params, z_mean, z_logvar, batch_input)  # Assuming batch_input are the targets
+            loss = compute_loss(params, z_mean, z_logvar, targets)
 
             loss.backward()
             if grad_clip is not None:
@@ -91,13 +91,17 @@ def eval_epoch(model, data_loader, device):
         for i, (data, lengths) in enumerate(data_loader):
             data = data.to(device, non_blocking=True)
             lengths = lengths.to(device, non_blocking=True)
+
+            # Use the modified model_step function to compute the loss
             loss = model_step(model, data, lengths)
             if loss is None:  # Skip this batch if loss is None
                 print(f'Batch {i} - loss is None')
                 continue
+
             loss_meter.update(loss.item(), data.size(0))
             progress_bar.set_postfix(loss=loss_meter.avg)
             progress_bar.update(data.size(0))
+
     return loss_meter.avg
 
 
