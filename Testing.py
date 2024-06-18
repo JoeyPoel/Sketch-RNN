@@ -36,13 +36,22 @@ def sample(model, z=None, max_seq_len=250):
         params = model.param_layer(output)
 
         # Unpack the params tuple (based on shapes of params)
-        pi = params[0].float()
-        mu1 = params[1][:, :, 0].float()
-        mu2 = params[1][:, :, 1].float()
-        sigma1 = params[2][:, :, 0].float()
-        sigma2 = params[2][:, :, 1].float()
-        rho = params[3].float()
-        pen = params[4].float()
+        pi = params[0].squeeze().float()
+        mu1 = params[1][:, :, 0].squeeze().float()
+        mu2 = params[1][:, :, 1].squeeze().float()
+        sigma1 = params[2][:, :, 0].squeeze().float()
+        sigma2 = params[2][:, :, 1].squeeze().float()
+        rho = params[3].squeeze().float()
+        pen = params[4].squeeze().float()
+
+        # Debugging: Print shapes of the variables
+        print(f"pi shape: {pi.shape}")
+        print(f"mu1 shape: {mu1.shape}")
+        print(f"mu2 shape: {mu2.shape}")
+        print(f"sigma1 shape: {sigma1.shape}")
+        print(f"sigma2 shape: {sigma2.shape}")
+        print(f"rho shape: {rho.shape}")
+        print(f"pen shape: {pen.shape}")
 
         # Sample from the output distribution
         next_stroke = sample_from_params(pi, mu1, mu2, sigma1, sigma2, rho, pen)
@@ -51,7 +60,6 @@ def sample(model, z=None, max_seq_len=250):
         input_seq = torch.tensor(next_stroke).unsqueeze(0).unsqueeze(0).to(device).float()
 
     return np.array(strokes)
-
 
 def sample_from_params(pi, mu1, mu2, sigma1, sigma2, rho, pen):
     """Sample stroke parameters from the given model parameters."""
@@ -68,8 +76,8 @@ def sample_from_params(pi, mu1, mu2, sigma1, sigma2, rho, pen):
     idx = idx % mu1.shape[0]
 
     mean = [mu1[idx], mu2[idx]]
-    cov = [[sigma1[idx] ** 2, rho[idx] * sigma1[idx] * sigma2[idx]],
-           [rho[idx] * sigma1[idx] * sigma2[idx], sigma2[idx] ** 2]]
+    cov = [[sigma1 ** 2, rho * sigma1 * sigma2],
+           [rho * sigma1 * sigma2, sigma2 ** 2]]
     xy = np.random.multivariate_normal(mean, cov)
 
     pen_state = np.random.choice(len(pen), p=pen)
@@ -126,6 +134,6 @@ if __name__ == "__main__":
     args = parse_args()
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    checkpoint_path = 'model2_save/checkpoint_epoch_2.pth'
+    checkpoint_path = 'model3_save/checkpoint_epoch_6.pth'
 
     generate_svg(args, checkpoint_path)

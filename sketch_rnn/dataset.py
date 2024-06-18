@@ -55,13 +55,21 @@ class SketchRNNDataset:
                  sketches,
                  max_len=250,
                  scale_factor=None,
-                 random_scale_factor=0.0,
-                 augment_stroke_prob=0.0,
+                 random_scale_factor=0.15,
+                 augment_stroke_prob=0.10,
+                 max_rotation_degree=10,
+                 max_translation=10,
+                 jitter_sigma=2.0,
+                 max_drop_prob=0.10,
                  limit=1000):
         self.sketches = sketches
         self.max_len = max_len
         self.random_scale_factor = random_scale_factor
         self.augment_stroke_prob = augment_stroke_prob
+        self.max_rotation_degree = max_rotation_degree
+        self.max_translation = max_translation
+        self.jitter_sigma = jitter_sigma
+        self.max_drop_prob = max_drop_prob
         self.limit = limit
         self.preprocess()
         self.normalize(scale_factor)
@@ -116,26 +124,40 @@ class SketchRNNDataset:
         return scaled_sketch
 
     def random_augment(self, sketch):
-        """Perform data augmentation by randomly dropping out strokes."""
+        """Perform data augmentation by applying rotation, translation, jitter, and random drop."""
+        # Rotation
+        angle = np.random.uniform(-self.max_rotation_degree, self.max_rotation_degree) * np.pi / 180.0
+        rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+        
+        # Translation
+        translation = np.random.uniform(-self.max_translation, self.max_translation, size=(1, 2))
+
         augmented_sketch = []
-        prev_stroke = np.array([0, 0, 1])
-        count = 0
         for stroke in sketch:
-            if len(stroke) == 3:
-                candidate = np.array([stroke[0], stroke[1], 0])
-            else:
-                candidate = stroke
-            if len(candidate) == 3 and (candidate[2] == 1).any():
-                count = 0
-            else:
-                count += 1
-            check = (len(candidate) == 3 and (candidate[2] == 0).all()) and (len(prev_stroke) == 3 and (prev_stroke[2] == 0).all()) and count > 2
-            if check and (np.random.rand() < self.augment_stroke_prob):
-                prev_stroke[0] += candidate[0]
-                prev_stroke[1] += candidate[1]
-            else:
-                prev_stroke = candidate
-                augmented_sketch.append(prev_stroke)
+            augmented_stroke = stroke.copy()
+            augmented_stroke[:, :2] = np.dot(augmented_stroke[:, :2], rotation_matrix) + translation
+            
+            # Jitter
+            jitter = np.random.normal(0, self.jitter_sigma, size=augmented_stroke[:, :2].shape)
+            augmented_stroke[:, :2] += jitter
+
+            augmented_sketch.append(augmented_stroke)
+
+        # Random dropping points
+        if np.random.rand() < self.max_drop_prob:
+            num_points = sum(len(stroke) for stroke in augmented_sketch)
+            drop_indices = np.random.choice(num_points, int(num_points * self.max_drop_prob), replace=False)
+            drop_indices = np.sort(drop_indices)
+
+            count = 0
+            for i in range(len(augmented_sketch)):
+                length = len(augmented_sketch[i])
+                keep_mask = np.ones(length, dtype=bool)
+                while count < len(drop_indices) and drop_indices[count] < length:
+                    keep_mask[drop_indices[count]] = False
+                    count += 1
+                augmented_sketch[i] = augmented_sketch[i][keep_mask]
+
         return augmented_sketch
 
 # ---- methods for batch collation ----

@@ -1,10 +1,6 @@
 import warnings
 import argparse
 
-__all__ = ['hparam_parser', 'hparams']
-
-
-
 def hparam_parser():
     parser = argparse.ArgumentParser(add_help=False)
     group = parser.add_argument_group('hyperparameters')
