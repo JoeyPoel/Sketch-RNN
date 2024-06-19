@@ -2,8 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Replace 'path_to_your_file.npz' with the path to the .npz file you want to check
-# For example you can load this npz '../sketches_npz/octopus/11223.npz'
-data = np.load('../sketches_npz/octopus/11201.npz', allow_pickle=True)
+data = np.load('./sketches_npz/octopus/11201_random_scale_0.3.npz', allow_pickle=True)
 
 # Print the number of arrays in the file
 print(f"Number of arrays in the file: {len(data.files)}")
@@ -20,7 +19,7 @@ plt.figure()
 for item in data.files:
     pen_stroke = data[item]
     # Transpose the pen stroke array to separate the x and y coordinates
-    x, y = np.transpose(pen_stroke)
+    x, y = np.transpose(pen_stroke)[:2]
     # Plot the pen stroke
     plt.plot(x, -y)  # Multiply y by -1 to flip the y-axis
 
