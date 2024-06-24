@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Replace 'path_to_your_file.npz' with the path to the .npz file you want to check
-data = np.load('./sketches_npz/octopus/11201_random_scale_0.3.npz', allow_pickle=True)
+data = np.load('./test_dataset/octopus/11201_horizontal_flip.npz', allow_pickle=True)
 
 # Print the number of arrays in the file
 print(f"Number of arrays in the file: {len(data.files)}")

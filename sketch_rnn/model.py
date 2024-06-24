@@ -78,6 +78,8 @@ class SketchRNN(nn.Module):
         self.max_len = hps.max_seq_len
         self.z_size = hps.z_size
         
+        self.num_mixture = hps.num_mixture 
+
         self.reset_parameters()
 
     def reset_parameters(self):
